@@ -1,4 +1,5 @@
 import * as anchor from '@project-serum/anchor';
+import * as fs from 'fs';
 
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import {
@@ -8,14 +9,535 @@ import {
 } from '@solana/web3.js';
 import { sendTransactions, SequenceType } from './connection';
 
-import {
-    getAtaForMint,
-    SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
-} from './utils';
 
-export const CANDY_MACHINE_PROGRAM = new anchor.web3.PublicKey(
-    "cndy3Z4yapfJBmL3ShUp5exZKqR3z33thTzeNMm2gRZ"
-);
+
+
+
+
+const idlPlain = `{
+    "version": "4.0.0",
+    "name": "candy_machine",
+    "instructions": [
+        {
+            "name": "initializeCandyMachine",
+            "accounts": [
+                {
+                    "name": "candyMachine",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "wallet",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "authority",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "payer",
+                    "isMut": false,
+                    "isSigner": true
+                }
+            ],
+            "args": [
+                {
+                    "name": "data",
+                    "type": {
+                        "defined": "CandyMachineData"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "mintNft",
+            "accounts": [
+                {
+                    "name": "mintAuthority",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "mint",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "metadata",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "tokenAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "tokenMetadataProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "payer",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "rent",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "masterEdition",
+                    "isMut": true,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "creatorKey",
+                    "type": "publicKey"
+                },
+                {
+                    "name": "uri",
+                    "type": "string"
+                },
+                {
+                    "name": "title",
+                    "type": "string"
+                }
+            ]
+        }
+    ],
+    "accounts": [
+        {
+            "name": "CandyMachine",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "authority",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "wallet",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "tokenMint",
+                        "type": {
+                            "option": "publicKey"
+                        }
+                    },
+                    {
+                        "name": "itemsRedeemed",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "data",
+                        "type": {
+                            "defined": "CandyMachineData"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "CollectionPDA",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "mint",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "candyMachine",
+                        "type": "publicKey"
+                    }
+                ]
+            }
+        }
+    ],
+    "types": [
+        {
+            "name": "CandyMachineData",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "uuid",
+                        "type": "string"
+                    },
+                    {
+                        "name": "price",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "symbol",
+                        "type": "string"
+                    },
+                    {
+                        "name": "hiddenSettings",
+                        "type": {
+                            "option": {
+                                "defined": "HiddenSettings"
+                            }
+                        }
+                    },
+                    {
+                        "name": "itemsAvailable",
+                        "type": "u64"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "ConfigLine",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "name",
+                        "type": "string"
+                    },
+                    {
+                        "name": "uri",
+                        "type": "string"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "EndSettings",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "endSettingType",
+                        "type": {
+                            "defined": "EndSettingType"
+                        }
+                    },
+                    {
+                        "name": "number",
+                        "type": "u64"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Creator",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "address",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "verified",
+                        "type": "bool"
+                    },
+                    {
+                        "name": "share",
+                        "type": "u8"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "HiddenSettings",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "name",
+                        "type": "string"
+                    },
+                    {
+                        "name": "uri",
+                        "type": "string"
+                    },
+                    {
+                        "name": "hash",
+                        "type": {
+                            "array": [
+                                "u8",
+                                32
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "WhitelistMintSettings",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "mode",
+                        "type": {
+                            "defined": "WhitelistMintMode"
+                        }
+                    },
+                    {
+                        "name": "mint",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "presale",
+                        "type": "bool"
+                    },
+                    {
+                        "name": "discountPrice",
+                        "type": {
+                            "option": "u64"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "GatekeeperConfig",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "gatekeeperNetwork",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "expireOnUse",
+                        "type": "bool"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "EndSettingType",
+            "type": {
+                "kind": "enum",
+                "variants": [
+                    {
+                        "name": "Date"
+                    },
+                    {
+                        "name": "Amount"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "WhitelistMintMode",
+            "type": {
+                "kind": "enum",
+                "variants": [
+                    {
+                        "name": "BurnEveryTime"
+                    },
+                    {
+                        "name": "NeverBurn"
+                    }
+                ]
+            }
+        }
+    ],
+    "errors": [
+        {
+            "code": 6000,
+            "name": "IncorrectOwner",
+            "msg": "Account does not have correct owner!"
+        },
+        {
+            "code": 6001,
+            "name": "Uninitialized",
+            "msg": "Account is not initialized!"
+        },
+        {
+            "code": 6002,
+            "name": "MintMismatch",
+            "msg": "Mint Mismatch!"
+        },
+        {
+            "code": 6003,
+            "name": "IndexGreaterThanLength",
+            "msg": "Index greater than length!"
+        },
+        {
+            "code": 6004,
+            "name": "NumericalOverflowError",
+            "msg": "Numerical overflow error!"
+        },
+        {
+            "code": 6005,
+            "name": "TooManyCreators",
+            "msg": "Can only provide up to 4 creators to candy machine (because candy machine is one)!"
+        },
+        {
+            "code": 6006,
+            "name": "UuidMustBeExactly6Length",
+            "msg": "Uuid must be exactly of 6 length"
+        },
+        {
+            "code": 6007,
+            "name": "NotEnoughTokens",
+            "msg": "Not enough tokens to pay for this minting"
+        },
+        {
+            "code": 6008,
+            "name": "NotEnoughSOL",
+            "msg": "Not enough SOL to pay for this minting"
+        },
+        {
+            "code": 6009,
+            "name": "TokenTransferFailed",
+            "msg": "Token transfer failed"
+        },
+        {
+            "code": 6010,
+            "name": "CandyMachineEmpty",
+            "msg": "Candy machine is empty!"
+        },
+        {
+            "code": 6011,
+            "name": "CandyMachineNotLive",
+            "msg": "Candy machine is not live!"
+        },
+        {
+            "code": 6012,
+            "name": "HiddenSettingsConfigsDoNotHaveConfigLines",
+            "msg": "Configs that are using hidden uris do not have config lines, they have a single hash representing hashed order"
+        },
+        {
+            "code": 6013,
+            "name": "CannotChangeNumberOfLines",
+            "msg": "Cannot change number of lines unless is a hidden config"
+        },
+        {
+            "code": 6014,
+            "name": "DerivedKeyInvalid",
+            "msg": "Derived key invalid"
+        },
+        {
+            "code": 6015,
+            "name": "PublicKeyMismatch",
+            "msg": "Public key mismatch"
+        },
+        {
+            "code": 6016,
+            "name": "NoWhitelistToken",
+            "msg": "No whitelist token present"
+        },
+        {
+            "code": 6017,
+            "name": "TokenBurnFailed",
+            "msg": "Token burn failed"
+        },
+        {
+            "code": 6018,
+            "name": "GatewayAppMissing",
+            "msg": "Missing gateway app when required"
+        },
+        {
+            "code": 6019,
+            "name": "GatewayTokenMissing",
+            "msg": "Missing gateway token when required"
+        },
+        {
+            "code": 6020,
+            "name": "GatewayTokenExpireTimeInvalid",
+            "msg": "Invalid gateway token expire time"
+        },
+        {
+            "code": 6021,
+            "name": "NetworkExpireFeatureMissing",
+            "msg": "Missing gateway network expire feature when required"
+        },
+        {
+            "code": 6022,
+            "name": "CannotFindUsableConfigLine",
+            "msg": "Unable to find an unused config line near your random number index"
+        },
+        {
+            "code": 6023,
+            "name": "InvalidString",
+            "msg": "Invalid string"
+        },
+        {
+            "code": 6024,
+            "name": "SuspiciousTransaction",
+            "msg": "Suspicious transaction detected"
+        },
+        {
+            "code": 6025,
+            "name": "CannotSwitchToHiddenSettings",
+            "msg": "Cannot Switch to Hidden Settings after items available is greater than 0"
+        },
+        {
+            "code": 6026,
+            "name": "IncorrectSlotHashesPubkey",
+            "msg": "Incorrect SlotHashes PubKey"
+        },
+        {
+            "code": 6027,
+            "name": "IncorrectCollectionAuthority",
+            "msg": "Incorrect collection NFT authority"
+        },
+        {
+            "code": 6028,
+            "name": "MismatchedCollectionPDA",
+            "msg": "Collection PDA address is invalid"
+        },
+        {
+            "code": 6029,
+            "name": "MismatchedCollectionMint",
+            "msg": "Provided mint account doesn't match collection PDA mint"
+        },
+        {
+            "code": 6030,
+            "name": "SlotHashesEmpty",
+            "msg": "Slot hashes Sysvar is empty"
+        },
+        {
+            "code": 6031,
+            "name": "MetadataAccountMustBeEmpty",
+            "msg": "The metadata account has data in it, and this must be empty to mint a new NFT"
+        },
+        {
+            "code": 6032,
+            "name": "MissingSetCollectionDuringMint",
+            "msg": "Missing set collection during mint IX for Candy Machine with collection set"
+        },
+        {
+            "code": 6033,
+            "name": "NoChangingCollectionDuringMint",
+            "msg": "Can't change collection settings after items have begun to be minted"
+        },
+        {
+            "code": 6034,
+            "name": "CandyCollectionRequiresRetainAuthority",
+            "msg": "Retain authority must be true for Candy Machines with a collection set"
+        }
+    ],
+    "metadata": {
+        "address": "JApKQ5eDrGL1HWa2P1pFBGXAeRwZj98iXxecqagbxGBM"
+    }
+}`;
+
 
 export interface CandyMachineState {
     itemsAvailable: number;
@@ -29,7 +551,6 @@ export type SetupState = {
 
 
 export interface CandyMachineAccount {
-    id: anchor.web3.PublicKey;
     program: anchor.Program;
     state: CandyMachineState;
 }
@@ -81,21 +602,50 @@ export const getCandyMachineState = async (
     candyMachineId: anchor.web3.PublicKey,
     connection: anchor.web3.Connection,
 ): Promise<CandyMachine> => {
+
+
     const provider = new anchor.Provider(connection, anchorWallet, {
-        preflightCommitment: 'recent',
+        preflightCommitment: "recent",
     });
 
-    const idl = await anchor.Program.fetchIdl(CANDY_MACHINE_PROGRAM, provider);
-    let program: any;
+    // Read the generated IDL.
+    const idl = JSON.parse(
+        idlPlain
+    );
+    /*
+    const idl = JSON.parse(
+        fs.readFileSync("./../idl/candy_machine.json", "utf8")
+    );*/
 
-    if (idl !== null) {
-        program = new anchor.Program(idl, CANDY_MACHINE_PROGRAM, provider);
-    }
 
+    /*
+    const idl = await anchor.Program.fetchIdl(
+        process.env.REACT_APP_CANDY_MACHINE_ID!,
+        provider
+    );
+*/
 
+    console.log({
+        idl
+    });
 
-    const state: any = await program.account.candyMachine.fetch(candyMachineId);
-    const itemsAvailable = state.data.itemsAvailable.toNumber();
+    console.log("IDL")
+    console.log({
+        idl
+    });
+
+    let program: anchor.Program<anchor.Idl>;
+
+    program = new anchor.Program(idl!, process.env.REACT_APP_CANDY_MACHINE_ID!, provider);
+    console.log({
+        program
+    });
+
+    //const state: any = await program.account.candyMachine.fetch(candyMachineId);
+    //const itemsAvailable = state.data.itemsAvailable.toNumber();
+
+    const itemsAvailable = 10;
+
 
     return {
         id: candyMachineId,
@@ -104,6 +654,7 @@ export const getCandyMachineState = async (
             itemsAvailable
         },
     };
+
 };
 
 
@@ -193,12 +744,6 @@ export const mintOneToken = async (
     afterTransactions: Transaction[] = [],
     setupState?: SetupState,
 ): Promise<MintResult | null> => {
-    const userTokenAccountAddress = (
-        await getAtaForMint(mint.publicKey, payer)
-    )[0];
-
-
-    const candyMachineAddress = candyMachine.id;
 
     const instructions = [];
     const signers: anchor.web3.Keypair[] = [];
@@ -206,14 +751,10 @@ export const mintOneToken = async (
 
     const metadataAddress = await getMetadata(mint.publicKey);
     const masterEdition = await getMasterEdition(mint.publicKey);
-
-
     const NftTokenAccount = await getAssociatedTokenAddress(
         mint.publicKey,
         payer
     );
-
-
 
     const nftData: any = {
         mintPublicKey: mint.publicKey,
@@ -221,6 +762,26 @@ export const mintOneToken = async (
         name: "John NFT"
     }
 
+    console.log({
+        nftData
+    })
+
+    console.log(
+        {
+            accounts: {
+                mintAuthority: payer,
+                mint: mint.publicKey,
+                tokenAccount: NftTokenAccount,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                metadata: metadataAddress,
+                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+                payer: payer,
+                systemProgram: SystemProgram.programId,
+                rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                masterEdition: masterEdition,
+            },
+        }
+    )
 
     instructions.push(
         await candyMachine.program.instruction.mintNft(nftData, {
@@ -239,9 +800,80 @@ export const mintOneToken = async (
         }),
     );
 
+    const instructionsMatrix = [instructions];
+    const signersMatrix = [signers];
+
+    try {
+        const txns = (
+            await sendTransactions(
+                candyMachine.program.provider.connection,
+                candyMachine.program.provider.wallet,
+                instructionsMatrix,
+                signersMatrix,
+                SequenceType.StopOnFailure,
+                'singleGossip',
+                () => { },
+                () => false,
+                undefined,
+                beforeTransactions,
+                afterTransactions,
+            )
+        ).txs.map(t => t.txid);
+        const mintTxn = txns[0];
+        return {
+            mintTxId: mintTxn,
+            metadataKey: metadataAddress,
+        };
+    } catch (e) {
+        console.log(e);
+    }
+    return null;
+};
 
 
 
+export const mintOneTokenV2 = async (
+    candyMachine: CandyMachineAccount,
+    payer: anchor.web3.PublicKey,
+    mint: anchor.web3.Keypair,
+    beforeTransactions: Transaction[] = [],
+    afterTransactions: Transaction[] = [],
+    setupState?: SetupState,
+): Promise<MintResult | null> => {
+
+    const instructions = [];
+    const signers: anchor.web3.Keypair[] = [];
+
+
+    const metadataAddress = await getMetadata(mint.publicKey);
+    const masterEdition = await getMasterEdition(mint.publicKey);
+    const NftTokenAccount = await getAssociatedTokenAddress(
+        mint.publicKey,
+        payer
+    );
+
+    const nftData: any = {
+        mintPublicKey: mint.publicKey,
+        url: "https://s3.eu-central-1.wasabisys.com/somefiles/0.json",
+        name: "John NFT"
+    }
+
+    instructions.push(
+        await candyMachine.program.instruction.mintNft(nftData, {
+            accounts: {
+                mintAuthority: payer,
+                mint: mint.publicKey,
+                tokenAccount: NftTokenAccount,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                metadata: metadataAddress,
+                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+                payer: payer,
+                systemProgram: SystemProgram.programId,
+                rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                masterEdition: masterEdition,
+            },
+        }),
+    );
 
     const instructionsMatrix = [instructions];
     const signersMatrix = [signers];
