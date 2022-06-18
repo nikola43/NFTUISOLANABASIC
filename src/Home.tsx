@@ -12,6 +12,7 @@ import {
     SetupState,
 } from "./candy-machine";
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { Transaction } from "@solana/web3.js";
 
 
 
@@ -140,7 +141,6 @@ export const Home = () => {
 
     const onMint = async () => {
 
-
         try {
 
 
@@ -163,7 +163,7 @@ export const Home = () => {
                         candyMachine,
                         wallet.publicKey,
                         mint,
-
+                        connection,
                     );
                 }
             }

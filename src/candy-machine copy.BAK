@@ -869,68 +869,36 @@ type MintResult = {
 export const mintOneToken = async (
   candyMachine: CandyMachineAccount,
   payer: anchor.web3.PublicKey,
-  mint: anchor.web3.Keypair,
   connection: anchor.web3.Connection,
   beforeTransactions: Transaction[] = [],
   afterTransactions: Transaction[] = [],
-  setupState?: SetupState,
 ): Promise<MintResult | null> => {
+  const mint = anchor.web3.Keypair.generate();
   const userTokenAccountAddress = (
     await getAtaForMint(mint.publicKey, payer)
   )[0];
 
+  // const userPayingAccountAddress = candyMachine.state.tokenMint
+  //   ? (await getAtaForMint(candyMachine.state.tokenMint, payer))[0]
+  //   : payer;
   const userPayingAccountAddress = payer;
 
   const candyMachineAddress = candyMachine.id;
-  const remainingAccounts = [];
   const instructions = [];
   const signers: anchor.web3.Keypair[] = [];
-  console.log('SetupState: ', setupState);
-  if (!setupState) {
-    signers.push(mint);
-    instructions.push(
-      ...[
-        anchor.web3.SystemProgram.createAccount({
-          fromPubkey: payer,
-          newAccountPubkey: mint.publicKey,
-          space: MintLayout.span,
-          lamports:
-            await candyMachine.program.provider.connection.getMinimumBalanceForRentExemption(
-              MintLayout.span,
-            ),
-          programId: TOKEN_PROGRAM_ID,
-        }),
-        Token.createInitMintInstruction(
-          TOKEN_PROGRAM_ID,
-          mint.publicKey,
-          0,
-          payer,
-          payer,
-        ),
-        createAssociatedTokenAccountInstruction(
-          userTokenAccountAddress,
-          payer,
-          payer,
-          mint.publicKey,
-        ),
-        Token.createMintToInstruction(
-          TOKEN_PROGRAM_ID,
-          mint.publicKey,
-          userTokenAccountAddress,
-          payer,
-          [],
-          1,
-        ),
-      ],
+
+  const lamports: number =
+    await connection.getMinimumBalanceForRentExemption(
+      82
     );
-  }
 
-  const metadataAddress = await getMetadata(mint.publicKey);
-  const masterEdition = await getMasterEdition(mint.publicKey);
-
-  const [candyMachineCreator, creatorBump] = await getCandyMachineCreator(
-    candyMachineAddress,
+  const NftTokenAccount = await Token.getAssociatedTokenAddress(
+    CANDY_MACHINE_PROGRAM,
+    TOKEN_PROGRAM_ID,
+    mint.publicKey,
+    payer
   );
+
 
   signers.push(mint);
   instructions.push(
@@ -967,6 +935,18 @@ export const mintOneToken = async (
         1,
       ),
     ],
+  );
+
+
+  const metadataAddress = await getMetadata(mint.publicKey);
+  const masterEdition = await getMasterEdition(mint.publicKey);
+
+  console.log(">>>>>>>>>", masterEdition);
+
+
+
+  const [candyMachineCreator, creatorBump] = await getCandyMachineCreator(
+    candyMachineAddress,
   );
 
   instructions.push(
